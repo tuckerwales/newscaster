@@ -1,0 +1,90 @@
+Transform: 'AWS::Serverless-2016-10-31'
+Resources:
+  ContentBucket:
+    Type: AWS::S3::Bucket
+  MediaBucket:
+    Type: AWS::S3::Bucket
+    Properties:
+      AccessControl: PublicRead
+  MediaTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      AttributeDefinitions:
+        -
+          AttributeName: "Timestamp"
+          AttributeType: "S"
+      KeySchema:
+        -
+          AttributeName: "Timestamp"
+          KeyType: "HASH"
+      ProvisionedThroughput: 
+          ReadCapacityUnits: "5"
+          WriteCapacityUnits: "5"
+      TableName: "Media"
+  TextToSpeech:
+    Type: AWS::Serverless::Function
+    Properties:
+      Handler: main
+      Runtime: go1.x
+      CodeUri: ../functions/SynthesizeText/.
+      Description: Converts the provided text into an audio file
+      Timeout: 5
+      Policies:
+        - AWSLambdaBasicExecutionRole
+        - AWSLambda_ReadOnlyAccess
+        - AWSXrayWriteOnlyAccess
+      Tracing: Active
+      Role: !GetAtt TextToSpeechLambdaExecutionRole.Arn
+      Events:
+        S3Bucket:
+          Type: S3
+          Properties:
+            Bucket: !Ref ContentBucket
+            Events: 's3:ObjectCreated:*'
+      Environment:
+        Variables:
+          MEDIA_BUCKET_NAME: !Ref MediaBucket
+  TextToSpeechLambdaS3InvokePermission:
+    Type: AWS::Lambda::Permission
+    Properties:
+      FunctionName: !GetAtt TextToSpeech.Arn
+      Action: lambda:InvokeFunction
+      Principal: s3.amazonaws.com
+      SourceAccount: !Ref AWS::AccountId
+      SourceArn: !GetAtt ContentBucket.Arn
+  TextToSpeechLambdaExecutionRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service:
+                - lambda.amazonaws.com
+            Action: sts:AssumeRole
+      Policies:
+        - PolicyName: Logs
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action: logs:*
+                Resource: arn:aws:logs:*:*:*
+        - PolicyName: S3
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action: s3:GetObject
+                Resource: !Sub 'arn:aws:s3:::*/*'
+              - Effect: Allow
+                Action: s3:PutObject
+                Resource: !Sub 'arn:aws:s3:::*/*'
+        - PolicyName: Polly
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action: polly:*
+                Resource: '*'
