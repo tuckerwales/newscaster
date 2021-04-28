@@ -1,3 +1,3 @@
-# newscaster
+![Newscaster logo](./images/logo.png)
 
-Work in progress, will add more later.
+WIP
